@@ -2,3 +2,5 @@
 config/
 gamefiles/*
 !gamefiles/.gitkeep
+.env.prod
+backups/

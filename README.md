@@ -219,6 +219,22 @@ docker compose up -d --build
 
 Data in the volumes is kept when you update.
 
+## Public deployment
+
+Running the realm for players outside your LAN is covered in
+[docs/PUBLIC-DEPLOYMENT.md](docs/PUBLIC-DEPLOYMENT.md), including the
+`docker-compose.prod.yml` overlay, port/firewall list, hardening checklist and a
+Raspberry Pi split-host topology.
+
+Two things worth knowing up front:
+
+- **D2GS needs an x86 host.** `D2GS.exe` is a 32-bit Windows binary under Wine;
+  the image installs `wine32:i386`, which has no ARM64 equivalent. PvPGN
+  (bnetd/d2cs/d2dbs) does run natively on a Pi, so the Pi can host the realm
+  while an x86 machine hosts D2GS.
+- **State lives in volumes.** Back up `pvpgn-var` (accounts and characters) with
+  `scripts/backup-realm.sh`.
+
 ## Game files
 
 D2GS needs the Diablo II game files (about 1 GB): the MPQ archives, the 1.13d DLLs and the 1.14d patch. The build

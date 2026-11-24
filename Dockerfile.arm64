@@ -1,0 +1,127 @@
+# syntax=docker/dockerfile:1
+#
+# EXPERIMENTAL arm64 build: D2GS on Raspberry Pi (or any ARM64 board) via
+# box86 + a 32-bit x86 Wine. No shared-stash hook, no d2vpstash.dll - this is
+# the stock, stable realm configuration.
+#
+# WHY THIS IS NEEDED
+#   Wine translates Win32 API calls, not machine code. D2GS.exe is PE32 i386,
+#   so on ARM64 it must run under an emulator (box86) in front of an *x86*
+#   Wine build.
+#
+# IMPORTANT - binfmt_misc
+#   Wine launches helper processes (wineserver) by exec'ing x86 ELF binaries.
+#   The kernel needs to know how to run those, which means box86 must be
+#   registered with binfmt_misc **on the host**, not inside the container.
+#   On the Pi, before using this image:
+#
+#     sudo apt install box86        # or build it; see docs/PUBLIC-DEPLOYMENT.md
+#     sudo systemctl restart systemd-binfmt
+#     ls /proc/sys/fs/binfmt_misc/  # should list 'box86'
+#
+#   Without that registration, wine will start and immediately fail to spawn
+#   wineserver. If you only want a private realm, running D2GS under box86
+#   directly on the host (outside Docker) is simpler and faster - the recipe is
+#   in docs/PUBLIC-DEPLOYMENT.md.
+#
+# BUILD (on the Pi)
+#   docker build -f Dockerfile.arm64 -t d2gs:arm64 \
+#     --build-arg WINE_URL=<32-bit wine tarball> .
+#
+#   WINE_URL must point at an i386 (x86) Wine build, not x86_64. Kron4ek's
+#   releases publish both; pick the "-x86" asset. The default below is a known
+#   good version; bump it if the download 404s.
+ 
+ARG DEBIAN_VERSION=bookworm
+ 
+############################################################
+# Stage 1: game files (identical to the x86 image)
+############################################################
+FROM debian:${DEBIAN_VERSION} AS files
+ 
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates wget \
+ && rm -rf /var/lib/apt/lists/*
+ 
+COPY scripts/ /scripts/
+COPY gamefiles/ /d2gs/
+RUN /scripts/fetch-gamefiles.sh /d2gs \
+ && rm -f /d2gs/.gitkeep /d2gs/*.part
+ 
+############################################################
+# Stage 2: box86 built for armhf
+############################################################
+FROM debian:${DEBIAN_VERSION} AS box86
+ 
+ARG BOX86_REF=master
+ 
+RUN dpkg --add-architecture armhf \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      git cmake build-essential python3 \
+      gcc-arm-linux-gnueabihf libc6-dev:armhf \
+ && rm -rf /var/lib/apt/lists/*
+ 
+RUN git clone --depth 1 --branch "${BOX86_REF}" https://github.com/ptitSeb/box86 /src
+RUN mkdir -p /src/build && cd /src/build \
+ && cmake .. \
+      -DARM_DYNAREC=ON \
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc \
+      -DCMAKE_INSTALL_PREFIX=/usr \
+ && make -j"$(nproc)" \
+ && make install DESTDIR=/box86-root
+ 
+############################################################
+# Stage 3: runtime
+############################################################
+FROM debian:${DEBIAN_VERSION}
+ 
+ARG WINE_URL=https://github.com/Kron4ek/Wine-Builds/releases/download/9.0/wine-9.0-x86.tar.xz
+ 
+# armhf libraries: box86 and the x86 Wine both need 32-bit ARM support.
+RUN dpkg --add-architecture armhf \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates wget xz-utils \
+      libc6:armhf libstdc++6:armhf libgcc-s1:armhf \
+      libfreetype6:armhf libpng16-16:armhf \
+      libx11-6:armhf libxext6:armhf libxrender1:armhf \
+      libgnutls30:armhf libasound2:armhf \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --create-home d2gs
+ 
+COPY --from=box86 /box86-root/ /
+ 
+# Fails the build early (rather than at runtime) if the host kernel cannot
+# execute armhf binaries at all.
+RUN box86 -v
+ 
+RUN set -eux; \
+    mkdir -p /opt/wine; \
+    wget -q -O /tmp/wine.tar.xz "${WINE_URL}"; \
+    tar -xJf /tmp/wine.tar.xz -C /opt/wine --strip-components=1; \
+    rm -f /tmp/wine.tar.xz; \
+    test -x /opt/wine/bin/wine
+ 
+ENV WINEPREFIX=/home/d2gs/.wine \
+    WINEARCH=win32 \
+    WINEDEBUG=-all \
+    WINE="box86 /opt/wine/bin/wine"
+ 
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 755 /usr/local/bin/entrypoint.sh
+ 
+USER d2gs
+ 
+# The Wine prefix is created on first start by the entrypoint (running
+# wineboot under box86 at build time is slow and often fails).
+COPY --from=files --chown=d2gs:d2gs /d2gs /home/d2gs/.wine/drive_c/d2gs
+COPY --from=files --chown=d2gs:d2gs /d2gs /opt/d2gs-seed
+ 
+WORKDIR /home/d2gs/.wine/drive_c/d2gs
+ 
+EXPOSE 4000 8888
+ 
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ 

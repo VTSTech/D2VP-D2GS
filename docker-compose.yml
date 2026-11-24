@@ -70,6 +70,11 @@ services:
       D2CS_SECRET: ${D2GS_PASSWORD:-}
       MAX_GAMES: ${MAX_GAMES:-50}
       MOTD: ${MOTD:-Welcome to Diablo II!}
+      # TEMP (D2VP shared-stash debugging): hex-logs every C<->S packet to d2gs.log.
+      # Set to 0 in .env once the 0x4F/0x7D investigation is done.
+      D2GS_DEBUG_NET_PACKET: ${D2GS_DEBUG_NET_PACKET:-1}
+      # TEMP diagnostic: surface DLL load + SEH traces to container stderr
+      WINEDEBUG: "+loaddll,+seh"
     ports:
       - "4000:4000"
       # Admin console, only reachable from the host itself

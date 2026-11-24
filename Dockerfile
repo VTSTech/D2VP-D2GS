@@ -44,6 +44,8 @@ USER d2gs
 RUN wineboot --init && wineserver --wait
 
 COPY --from=files --chown=d2gs:d2gs /d2gs ${WINEPREFIX}/drive_c/d2gs
+# Pristine copy used to seed an empty game-directory volume at first start.
+COPY --from=files --chown=d2gs:d2gs /d2gs /opt/d2gs-seed
 WORKDIR ${WINEPREFIX}/drive_c/d2gs
 
 # 4000/tcp: game traffic, 8888/tcp: telnet admin console

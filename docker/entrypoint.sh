@@ -4,6 +4,13 @@ set -euo pipefail
 
 : "${D2CS_IP:?D2CS_IP must be set to the IP address or hostname of your PvPGN d2cs server}"
 
+# When the game directory is a volume it starts empty; seed it from the image so
+# upgrades don't require a manual copy. Safe to leave in place with no volume.
+if [ ! -f D2GS.exe ] && [ -d /opt/d2gs-seed ]; then
+  echo "Seeding empty game directory from /opt/d2gs-seed"
+  cp -a /opt/d2gs-seed/. .
+fi
+
 # D2GS only accepts IP addresses; resolve hostnames such as a compose service name.
 resolve() {
   local ip
@@ -24,6 +31,9 @@ ADMIN_PORT="${ADMIN_PORT:-8888}"
 # Hash of the default admin password "abcd123"
 ADMIN_PASSWORD_HASH="${ADMIN_PASSWORD_HASH:-9e75a42100e1b9e0b5d3873045084fae699adcb0}"
 MOTD="${MOTD:-Welcome to Diablo II!}"
+# Packet/callback hex logging to d2gs.log (verbose; keep off in steady state)
+D2GS_DEBUG_NET_PACKET="${D2GS_DEBUG_NET_PACKET:-0}"
+D2GS_DEBUG_EVENT_CALLBACK="${D2GS_DEBUG_EVENT_CALLBACK:-0}"
 
 dword() { printf 'dword:%08x' "$1"; }
 
@@ -56,8 +66,8 @@ REGEDIT4
 "IdleSleep"=dword:00000001
 "BusySleep"=dword:00000001
 "CharPendingTimeout"=dword:00000258
-"DebugNetPacket"=dword:00000000
-"DebugEventCallback"=dword:00000000
+"DebugNetPacket"=$(dword "$D2GS_DEBUG_NET_PACKET")
+"DebugEventCallback"=$(dword "$D2GS_DEBUG_EVENT_CALLBACK")
 "EnableGSLog"=dword:00000001
 "EnableGELog"=dword:00000001
 "EnableGEMsg"=dword:00000000
