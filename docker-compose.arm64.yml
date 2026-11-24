@@ -1,0 +1,20 @@
+# ARM64 overlay: build D2GS from Dockerfile.arm64 (box86 + 32-bit x86 Wine).
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.arm64.yml \
+#     --env-file .env.prod up -d --build
+#
+# Prerequisite on the host: box86 registered with binfmt_misc, or wine cannot
+# spawn wineserver. See docs/PUBLIC-DEPLOYMENT.md ("Can I run D2GS on a
+# Raspberry Pi?").
+#
+# PvPGN (bnetd/d2cs/d2dbs) builds natively on arm64 and needs no overlay.
+
+services:
+  d2gs:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.arm64
+      args:
+        # Must be a 32-bit (i386) Wine build; "-x86" in the asset name.
+        WINE_URL: ${WINE_URL:-https://github.com/Kron4ek/Wine-Builds/releases/download/9.0/wine-9.0-x86.tar.xz}
