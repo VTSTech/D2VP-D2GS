@@ -58,11 +58,13 @@ ARG BOX86_REF=master
 RUN dpkg --add-architecture armhf \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      git cmake build-essential python3 \
+      ca-certificates git cmake build-essential python3 \
       gcc-arm-linux-gnueabihf libc6-dev:armhf \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && update-ca-certificates
 
-RUN git clone --depth 1 --branch "${BOX86_REF}" https://github.com/ptitSeb/box86 /src
+RUN git clone --depth 1 --branch "${BOX86_REF}" https://github.com/ptitSeb/box86 /src \
+ && test -f /src/CMakeLists.txt
 RUN mkdir -p /src/build && cd /src/build \
  && cmake .. \
       -DARM_DYNAREC=ON \
